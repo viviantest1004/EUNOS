@@ -1,0 +1,180 @@
+#!/bin/sh
+# EunOS Web Browser launcher
+# Auto-select text browser (lynx / w3m / links / links2)
+
+C_BOX='\033[1;36m'
+C_TITLE='\033[1;37m'
+C_OK='\033[1;32m'
+C_WARN='\033[1;33m'
+C_ERR='\033[1;31m'
+C_DIM='\033[2;37m'
+C_ACCENT='\033[1;35m'
+NC='\033[0m'
+
+# Searching for available browsers
+find_browser() {
+    for b in lynx w3m links2 links elinks; do
+        if command -v "$b" > /dev/null 2>&1; then
+            echo "$b"
+            return 0
+        fi
+    done
+    return 1
+}
+
+draw_header() {
+    clear
+    printf "${C_BOX}"
+    printf "╔══════════════════════════════════════════╗\n"
+    printf "║   ${C_TITLE}EunOS Web Browser${C_BOX}                      ║\n"
+    printf "╠══════════════════════════════════════════╣\n"
+    printf "${NC}"
+}
+
+install_browser() {
+    draw_header
+    printf "${C_BOX}║  ${C_WARN}Installing browser.${C_BOX}                    ║\n"
+    printf "╚══════════════════════════════════════════╝${NC}\n\n"
+
+    # Check network
+    if ! ping -c 1 -W 3 8.8.8.8 > /dev/null 2>&1; then
+        printf "  ${C_ERR}[✗] No internet. Cannot install.${NC}\n"
+        printf "  ${C_DIM}Cannot install browser in offline mode.${NC}\n\n"
+        printf "  ${C_DIM}Press Enter to continue...${NC}"
+        read -r _d
+        return 1
+    fi
+
+    printf "  ${C_DIM}Updating packages...${NC}\n"
+    apk update 2>/dev/null
+
+    printf "  ${C_DIM}Installing lynx...${NC}\n"
+    if apk add lynx 2>/dev/null; then
+        printf "  ${C_OK}[✓] lynx installed${NC}\n"
+        sleep 1
+        return 0
+    fi
+
+    printf "  ${C_DIM}Trying to install w3m...${NC}\n"
+    if apk add w3m 2>/dev/null; then
+        printf "  ${C_OK}[✓] w3m installed${NC}\n"
+        sleep 1
+        return 0
+    fi
+
+    printf "  ${C_ERR}[✗] Browser installation failed${NC}\n"
+    sleep 2
+    return 1
+}
+
+show_browser_info() {
+    BROWSER="$1"
+    draw_header
+    printf "${C_BOX}║  ${C_DIM}Browser:${C_ACCENT} %-31s${C_BOX}║\n" "$BROWSER"
+    printf "╠══════════════════════════════════════════╣\n"
+    printf "║  ${C_DIM}Keyboard shortcuts${C_BOX}                       ║\n"
+    printf "║                                          ║\n"
+
+    case "$BROWSER" in
+        lynx)
+            printf "║  ${C_ACCENT}↑↓${C_DIM} Navigate links ${C_ACCENT}Enter${C_DIM} Open link${C_BOX}   ║\n"
+            printf "║  ${C_ACCENT}←${C_DIM} Back         ${C_ACCENT}→${C_DIM} Select link${C_BOX}       ║\n"
+            printf "║  ${C_ACCENT}g${C_DIM} Enter URL   ${C_ACCENT}q${C_DIM} Exit${C_BOX}              ║\n"
+            printf "║  ${C_ACCENT}/${C_DIM} Search      ${C_ACCENT}d${C_DIM} Download${C_BOX}          ║\n"
+            ;;
+        w3m)
+            printf "║  ${C_ACCENT}↑↓←→${C_DIM} Move      ${C_ACCENT}Enter${C_DIM} Select${C_BOX}        ║\n"
+            printf "║  ${C_ACCENT}U${C_DIM} Enter URL   ${C_ACCENT}q${C_DIM} Exit${C_BOX}              ║\n"
+            printf "║  ${C_ACCENT}B${C_DIM} Back        ${C_ACCENT}T${C_DIM} New tab${C_BOX}           ║\n"
+            ;;
+        links|links2)
+            printf "║  ${C_ACCENT}↑↓${C_DIM} Navigate links ${C_ACCENT}Enter${C_DIM} Open link${C_BOX}   ║\n"
+            printf "║  ${C_ACCENT}Alt+←${C_DIM} Back       ${C_ACCENT}g${C_DIM} Enter URL${C_BOX}       ║\n"
+            printf "║  ${C_ACCENT}q${C_DIM} Exit                              ${C_BOX}║\n"
+            ;;
+    esac
+
+    printf "║                                          ║\n"
+    printf "╚══════════════════════════════════════════╝${NC}\n\n"
+}
+
+launch_with_url() {
+    BROWSER="$1"
+    URL="$2"
+
+    show_browser_info "$BROWSER"
+    printf "  ${C_DIM}Starting browser...${NC}\n\n"
+    sleep 1
+
+    case "$BROWSER" in
+        lynx)   lynx "$URL" ;;
+        w3m)    w3m "$URL" ;;
+        links)  links "$URL" ;;
+        links2) links2 "$URL" ;;
+        elinks) elinks "$URL" ;;
+    esac
+}
+
+# ─── Main ────────────────────────────────────────────────────
+BROWSER=$(find_browser)
+
+if [ -z "$BROWSER" ]; then
+    draw_header
+    printf "${C_BOX}║  ${C_ERR}Browser not found.${C_BOX}                       ║\n"
+    printf "╚══════════════════════════════════════════╝${NC}\n\n"
+    printf "  ${C_WARN}Supported browsers: lynx, w3m, links, links2${NC}\n\n"
+    printf "  ${C_ACCENT}[1]${NC} Try auto-install (internet required)\n"
+    printf "  ${C_ACCENT}[Q]${NC} Exit\n\n"
+    printf "  ${C_ACCENT}Select: ${NC}"
+    read -r choice
+
+    case "$choice" in
+        1)
+            if install_browser; then
+                BROWSER=$(find_browser)
+            fi
+            ;;
+    esac
+
+    if [ -z "$BROWSER" ]; then
+        clear
+        printf "${C_ERR}  No browser found. Exiting.${NC}\n\n"
+        exit 1
+    fi
+fi
+
+# URL selection menu
+while true; do
+    draw_header
+    printf "${C_BOX}║  ${C_DIM}Browser:${C_ACCENT} %-31s${C_BOX}║\n" "$BROWSER"
+    printf "╠══════════════════════════════════════════╣\n"
+    printf "║  ${C_ACCENT}[1]${C_BOX} Bookmark: Google Search              ║\n"
+    printf "║  ${C_ACCENT}[2]${C_BOX} Bookmark: Wikipedia                 ║\n"
+    printf "║  ${C_ACCENT}[3]${C_BOX} Bookmark: DuckDuckGo                ║\n"
+    printf "║  ${C_ACCENT}[4]${C_BOX} Enter URL directly                  ║\n"
+    printf "║                                          ║\n"
+    printf "║  ${C_DIM}[Q]${C_BOX} Exit                                  ║\n"
+    printf "╚══════════════════════════════════════════╝${NC}\n"
+    printf "\n  ${C_ACCENT}Select: ${NC}"
+    read -r choice
+
+    case "$choice" in
+        1) launch_with_url "$BROWSER" "https://www.google.com" ;;
+        2) launch_with_url "$BROWSER" "https://ko.wikipedia.org" ;;
+        3) launch_with_url "$BROWSER" "https://duckduckgo.com" ;;
+        4)
+            printf "  ${C_ACCENT}Enter URL (https://...): ${NC}"
+            read -r url
+            [ -n "$url" ] && launch_with_url "$BROWSER" "$url"
+            ;;
+        [qQ]|exit|quit)
+            clear
+            printf "${C_OK}  Exiting browser.${NC}\n\n"
+            exit 0
+            ;;
+        *)
+            printf "  ${C_ERR}Invalid selection.${NC}\n"
+            sleep 1
+            ;;
+    esac
+done

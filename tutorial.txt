@@ -1,0 +1,116 @@
+=====================================================
+         EunOS 1.0.0 "Harmony" - Tutorial
+=====================================================
+
+[ Getting Started ]
+
+  After booting, you will see the terminal.
+  No login required - just start typing!
+
+  Type 'help' to see all commands.
+
+=====================================================
+
+[ Apps ]
+
+  calc          Calculator
+                - Type math: 10 * 3.5
+                - Use 'ans' for previous result: ans + 5
+                - Type 'q' to quit
+
+  browser       Web browser (lynx/w3m)
+                - Navigate with arrow keys
+                - Enter to open link
+                - 'q' to quit
+
+  fm            File Manager (TUI)
+                - Arrow keys to move
+                - Enter to open
+                - 'd' to delete
+                - 'q' to quit
+
+  settings      System Settings Menu
+                - Network, Date/Time, Hostname, etc.
+
+  newfile       Create & Edit Text File
+                - Usage: newfile
+                  or:    newfile myfile
+                - Opens vi editor:
+                    i         = start typing
+                    Esc       = stop typing
+                    :wq Enter = save and quit
+                    :q! Enter = quit without saving
+                - Or nano (if installed):
+                    just type
+                    Ctrl+O  = save
+                    Ctrl+X  = quit
+
+=====================================================
+
+[ Network ]
+
+  net           Connect via cable (DHCP auto)
+  wifi          WiFi connection manager
+                - Scan for networks
+                - Enter SSID and password
+  ping 8.8.8.8  Test internet connection
+  wget <url>    Download a file
+
+=====================================================
+
+[ System ]
+
+  info          Show system info (CPU, RAM, disk)
+  shutdown      Shutdown the system
+  restart       Restart the system
+  help          Show all commands
+
+=====================================================
+
+[ Files ]
+
+  open <file>   Auto-open any file (50+ formats)
+                Example: open photo.jpg
+                         open document.pdf
+                         open archive.zip
+
+  extract <file> Extract archives
+                Example: extract file.zip
+                         extract file.tar.gz
+
+  mkcd <name>   Create folder and enter it
+                Example: mkcd myproject
+
+  ll            List files (detailed)
+  ls            List files
+  cd <folder>   Enter folder
+  cd ..         Go back
+
+=====================================================
+
+[ Packages ]
+
+  apk add nano          Install nano editor
+  apk add python3       Install Python 3
+  apk add git           Install Git
+  apk search <name>     Search for a package
+
+  eunos-install <pkg>   EunOS package helper
+  eunos-install --list  Show recommended packages
+
+=====================================================
+
+[ Tips ]
+
+  - Tab key = auto-complete commands
+  - Up arrow = previous command
+  - Ctrl+C   = cancel current command
+  - Ctrl+L   = clear screen (or type 'clear')
+
+  View this file anytime:
+    open tutorial.txt
+    or: cat tutorial.txt
+
+=====================================================
+  EunOS 1.0.0 | Made by Claude Code | Anthropic
+=====================================================

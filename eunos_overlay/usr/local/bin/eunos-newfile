@@ -1,0 +1,96 @@
+#!/bin/sh
+# eunos-newfile - Create and edit a text file
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+clear
+printf "${CYAN}  ╔══════════════════════════════════╗${NC}\n"
+printf "${CYAN}  ║       EunOS Text Editor          ║${NC}\n"
+printf "${CYAN}  ╚══════════════════════════════════╝${NC}\n"
+echo ""
+
+# 파일명 인자로 받거나 직접 입력
+if [ -n "$1" ]; then
+    FILENAME="$1"
+else
+    printf "  File name (e.g. notes.txt): "
+    read FILENAME
+    [ -z "$FILENAME" ] && echo "  Cancelled." && exit 0
+fi
+
+# .txt 확장자 없으면 자동 추가
+case "$FILENAME" in
+    *.*)  ;;
+    *)    FILENAME="${FILENAME}.txt" ;;
+esac
+
+echo ""
+
+# 에디터 선택 (nano > vi)
+if command -v nano >/dev/null 2>&1; then
+    EDITOR_CMD="nano"
+elif command -v vi >/dev/null 2>&1; then
+    EDITOR_CMD="vi"
+else
+    # 에디터 없으면 간이 입력 모드
+    EDITOR_CMD=""
+fi
+
+if [ -f "$FILENAME" ]; then
+    printf "  ${YELLOW}File '$FILENAME' already exists.${NC}\n"
+    printf "  ${GREEN}[1]${NC} Edit existing\n"
+    printf "  ${GREEN}[2]${NC} Overwrite\n"
+    printf "  ${GREEN}[0]${NC} Cancel\n"
+    printf "  Select: "
+    read choice
+    case "$choice" in
+        1) ;;
+        2) > "$FILENAME" ;;
+        *) echo "  Cancelled." ; exit 0 ;;
+    esac
+else
+    touch "$FILENAME"
+    printf "  ${GREEN}Created: $FILENAME${NC}\n"
+fi
+
+echo ""
+
+if [ -n "$EDITOR_CMD" ]; then
+    printf "  Opening with ${YELLOW}$EDITOR_CMD${NC}...\n"
+    if [ "$EDITOR_CMD" = "vi" ]; then
+        printf "  ${CYAN}vi shortcuts: [i]=insert  [Esc]=command  [:wq]=save&quit  [:q!]=quit${NC}\n"
+    elif [ "$EDITOR_CMD" = "nano" ]; then
+        printf "  ${CYAN}nano shortcuts: [Ctrl+O]=save  [Ctrl+X]=quit${NC}\n"
+    fi
+    echo ""
+    sleep 1
+    $EDITOR_CMD "$FILENAME"
+else
+    # 에디터 없으면 라인 입력 모드
+    printf "${YELLOW}  No editor found. Simple input mode.${NC}\n"
+    printf "  Type text line by line. Type ${RED}:wq${NC} on a blank line to save.\n"
+    echo ""
+    while true; do
+        printf "  > "
+        read line
+        case "$line" in
+            :wq|:w) break ;;
+            :q!)    rm -f "$FILENAME" ; echo "  Discarded." ; exit 0 ;;
+            *)      echo "$line" >> "$FILENAME" ;;
+        esac
+    done
+fi
+
+# 저장 확인
+if [ -f "$FILENAME" ]; then
+    SIZE=$(wc -c < "$FILENAME")
+    LINES=$(wc -l < "$FILENAME")
+    printf "\n  ${GREEN}Saved: $FILENAME  ($LINES lines, $SIZE bytes)${NC}\n"
+else
+    printf "\n  ${RED}File not saved.${NC}\n"
+fi
+echo ""

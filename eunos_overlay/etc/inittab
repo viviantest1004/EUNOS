@@ -1,0 +1,18 @@
+# EunOS inittab - BusyBox init compatible + root auto-login + Recovery Mode support
+
+::sysinit:/sbin/openrc sysinit
+::sysinit:/sbin/openrc boot
+::wait:/sbin/openrc default
+
+# tty1: detect recovery mode and branch (Recovery Menu if recovery, else auto-login)
+tty1::respawn:/usr/local/bin/eunos-tty1-init
+
+# ttyS0 (QEMU serial): detect recovery mode and branch
+ttyS0::respawn:/usr/local/bin/eunos-tty1-init
+
+# Additional consoles
+tty2::respawn:/sbin/getty 38400 tty2
+tty3::respawn:/sbin/getty 38400 tty3
+
+::shutdown:/sbin/openrc shutdown
+::restart:/sbin/init

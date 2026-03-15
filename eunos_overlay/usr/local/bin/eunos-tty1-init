@@ -1,0 +1,11 @@
+#!/bin/sh
+# EunOS tty1 initialization script
+# Check kernel parameters and branch to Recovery Mode or Boot Selector
+
+if grep -q 'eunos\.recovery=1' /proc/cmdline 2>/dev/null; then
+    # Recovery Mode: launch Recovery Environment directly
+    exec /usr/local/bin/eunos-recovery
+else
+    # Normal/safe mode: run Boot Selector (Start EunOS or Recovery Mode)
+    exec /usr/local/bin/eunos-bootselector
+fi

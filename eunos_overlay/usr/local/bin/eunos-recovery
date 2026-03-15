@@ -1,0 +1,509 @@
+#!/bin/sh
+# EunOS Recovery Environment
+# Windows RE style Recovery Menu - full version
+
+# ── Color definitions ──────────────────────────────────────────────────
+C_BG='\033[44m'
+C_TITLE='\033[1;37;44m'
+C_ITEM='\033[0;37m'
+C_SEL='\033[1;30;47m'
+C_ACCENT='\033[1;36m'
+C_WARN='\033[1;33m'
+C_ERR='\033[1;31m'
+C_OK='\033[1;32m'
+C_DIM='\033[2;37m'
+NC='\033[0m'
+
+# ── Utility functions ──────────────────────────────────────────────────
+press_any_key() {
+    printf "\n${C_DIM}  Press Enter to continue...${NC}"
+    read -r _dummy
+}
+
+wait_confirm() {
+    printf "${C_WARN}  Continue? [y/N]: ${NC}"
+    read -r ans
+    case "$ans" in
+        [yY]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+print_header() {
+    clear
+    printf "${C_ACCENT}"
+    printf "╔══════════════════════════════════════════════════════════════╗\n"
+    printf "║                                                              ║\n"
+    printf "║    ███████╗██╗   ██╗███╗   ██╗ ██████╗ ███████╗            ║\n"
+    printf "║    ██╔════╝██║   ██║████╗  ██║██╔═══██╗██╔════╝            ║\n"
+    printf "║    █████╗  ██║   ██║██╔██╗ ██║██║   ██║███████╗            ║\n"
+    printf "║    ██╔══╝  ██║   ██║██║╚██╗██║██║   ██║╚════██║            ║\n"
+    printf "║    ███████╗╚██████╔╝██║ ╚████║╚██████╔╝███████║            ║\n"
+    printf "║    ╚══════╝ ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝            ║\n"
+    printf "║                                                              ║\n"
+    printf "║              ${C_WARN}Recovery Environment${C_ACCENT}                          ║\n"
+    printf "║         ${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  (24-hour)${C_ACCENT}                 ║\n"
+    printf "╚══════════════════════════════════════════════════════════════╝\n"
+    printf "${NC}\n"
+}
+
+# ══════════════════════════════════════════════════════════════
+# CMD - Admin Command Prompt (including drive mount)
+# ══════════════════════════════════════════════════════════════
+
+mount_drives() {
+    printf "  ${C_DIM}Scanning partitions...${NC}\n"
+    mkdir -p /mnt/c /mnt/d /mnt/x
+
+    MOUNTED=""
+    DRIVE_IDX=0
+
+    # Block device search (sda, sdb, nvme0n1, mmcblk0, etc.)
+    for dev in /dev/sda? /dev/sdb? /dev/sdc? /dev/nvme0n1p? /dev/nvme1n1p? /dev/mmcblk0p?; do
+        [ -b "$dev" ] || continue
+
+        # Skip already mounted partitions
+        if grep -q "^$dev " /proc/mounts 2>/dev/null; then
+            continue
+        fi
+
+        # Filesystem type detection
+        FSTYPE=""
+        if command -v blkid > /dev/null 2>&1; then
+            FSTYPE=$(blkid -o value -s TYPE "$dev" 2>/dev/null)
+        fi
+
+        case "$FSTYPE" in
+            ext2|ext3|ext4|btrfs|f2fs|xfs)
+                case "$DRIVE_IDX" in
+                    0) MNT=/mnt/c; LABEL="C:" ;;
+                    1) MNT=/mnt/d; LABEL="D:" ;;
+                    2) MNT=/mnt/x; LABEL="X:" ;;
+                    *) MNT="/mnt/drive${DRIVE_IDX}"; mkdir -p "$MNT"; LABEL="E${DRIVE_IDX}:" ;;
+                esac
+                if mount -t "$FSTYPE" -o rw "$dev" "$MNT" 2>/dev/null; then
+                    printf "  ${C_OK}[✓]${NC} ${LABEL} → $dev ($FSTYPE) → $MNT\n"
+                    MOUNTED="$MOUNTED $LABEL=$MNT"
+                    DRIVE_IDX=$((DRIVE_IDX+1))
+                fi
+                ;;
+            vfat|ntfs|exfat)
+                case "$DRIVE_IDX" in
+                    0) MNT=/mnt/c; LABEL="C:" ;;
+                    1) MNT=/mnt/d; LABEL="D:" ;;
+                    2) MNT=/mnt/x; LABEL="X:" ;;
+                    *) MNT="/mnt/drive${DRIVE_IDX}"; mkdir -p "$MNT"; LABEL="E${DRIVE_IDX}:" ;;
+                esac
+                OPTS="rw"
+                [ "$FSTYPE" = "ntfs" ] && OPTS="rw,noatime"
+                if mount -t "$FSTYPE" -o "$OPTS" "$dev" "$MNT" 2>/dev/null; then
+                    printf "  ${C_OK}[✓]${NC} ${LABEL} → $dev ($FSTYPE) → $MNT\n"
+                    MOUNTED="$MOUNTED $LABEL=$MNT"
+                    DRIVE_IDX=$((DRIVE_IDX+1))
+                fi
+                ;;
+        esac
+    done
+
+    if [ -z "$MOUNTED" ]; then
+        printf "  ${C_WARN}[!] No mountable partitions (live USB environment)${NC}\n"
+        printf "  ${C_DIM}     Booting from USB, only external disks can be mounted.${NC}\n"
+    fi
+
+    echo "$MOUNTED"
+}
+
+launch_cmd() {
+    print_header
+    printf "${C_ACCENT}┌─ Admin Command Prompt (Admin CMD) ──────────────────────────┐${NC}\n"
+    printf "${C_DIM}│  Drives are auto-detected and mounted.                        │${NC}\n"
+    printf "${C_DIM}│  To return to recovery menu: exit or Ctrl+D                   │${NC}\n"
+    printf "${C_ACCENT}└──────────────────────────────────────────────────────────────┘${NC}\n\n"
+
+    MOUNTED_INFO=$(mount_drives)
+
+    printf "\n${C_DIM}  Drive path summary:${NC}\n"
+    printf "  ${C_DIM}C: drive → /mnt/c${NC}\n"
+    printf "  ${C_DIM}D: drive → /mnt/d${NC}\n"
+    printf "  ${C_DIM}X: drive → /mnt/x  (recovery partition)${NC}\n"
+    printf "  ${C_DIM}Current system → / (root)${NC}\n\n"
+
+    printf "  ${C_OK}Entering shell. Drive access: cd /mnt/c${NC}\n\n"
+    sleep 1
+
+    # Set environment variables and aliases
+    export PS1="[RECOVERY-ADMIN@eunos \w]# "
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+    # Define aliases via temporary rc file
+    RC_FILE=$(mktemp /tmp/recovery_rc.XXXXXX)
+    cat > "$RC_FILE" << 'RCEOF'
+# EunOS Recovery CMD environment
+alias c:='cd /mnt/c && ls'
+alias d:='cd /mnt/d && ls'
+alias x:='cd /mnt/x && ls'
+alias dir='ls -la --color=auto'
+alias cls='clear'
+alias copy='cp'
+alias move='mv'
+alias del='rm'
+alias type='cat'
+alias md='mkdir'
+alias rd='rmdir'
+alias drives='echo "C: → /mnt/c"; echo "D: → /mnt/d"; echo "X: → /mnt/x"; df -h /mnt/c /mnt/d /mnt/x 2>/dev/null'
+alias sysinfo='uname -a; free -h; df -h'
+export PS1="\[\033[1;31m\]RECOVERY\[\033[0m\]:\[\033[1;34m\]\w\[\033[0m\]# "
+echo ""
+echo "  Welcome to EunOS Recovery CMD."
+echo "  ─────────────────────────────────────"
+echo "  c:  → Go to C: drive"
+echo "  d:  → Go to D: drive"
+echo "  x:  → Go to X: drive"
+echo "  drives → Drive list"
+echo "  exit → Return to recovery menu"
+echo ""
+RCEOF
+
+    /bin/sh --rcfile "$RC_FILE" 2>/dev/null || /bin/sh
+    rm -f "$RC_FILE"
+
+    # Unmount option
+    printf "\n${C_WARN}  Unmount mounted drives? [y/N]: ${NC}"
+    read -r ans
+    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+        umount /mnt/c /mnt/d /mnt/x 2>/dev/null
+        printf "  ${C_OK}[✓] Drive unmount complete${NC}\n"
+        sleep 1
+    fi
+}
+
+# ══════════════════════════════════════════════════════════════
+# File Manager
+# ══════════════════════════════════════════════════════════════
+
+launch_filemanager() {
+    print_header
+    printf "${C_ACCENT}┌─ File Manager ───────────────────────────────────────────────┐${NC}\n"
+
+    # Use eunfm if available
+    if command -v eunfm > /dev/null 2>&1; then
+        printf "${C_DIM}│  Starting EunOS File Manager...                               │${NC}\n"
+        printf "${C_ACCENT}└──────────────────────────────────────────────────────────────┘${NC}\n\n"
+        eunfm
+    elif command -v mc > /dev/null 2>&1; then
+        printf "${C_DIM}│  Starting Midnight Commander...                               │${NC}\n"
+        printf "${C_ACCENT}└──────────────────────────────────────────────────────────────┘${NC}\n\n"
+        mc
+    else
+        printf "${C_DIM}│  Simple File Explorer mode                                    │${NC}\n"
+        printf "${C_ACCENT}└──────────────────────────────────────────────────────────────┘${NC}\n\n"
+        CUR_DIR="/"
+        while true; do
+            clear
+            printf "${C_ACCENT}  File Explorer — ${C_TITLE}$CUR_DIR${NC}\n"
+            printf "${C_DIM}  ──────────────────────────────────────────────────────────${NC}\n"
+            i=1
+            FILES=""
+            for f in "$CUR_DIR"/*; do
+                [ -e "$f" ] || continue
+                if [ -d "$f" ]; then
+                    printf "  ${C_ACCENT}[%2d]${NC} 📁 %s/\n" "$i" "$(basename "$f")"
+                else
+                    SZ=$(ls -lh "$f" 2>/dev/null | awk '{print $5}')
+                    printf "  ${C_ACCENT}[%2d]${NC} 📄 %-30s %s\n" "$i" "$(basename "$f")" "$SZ"
+                fi
+                FILES="$FILES|$f"
+                i=$((i+1))
+            done
+            printf "\n  ${C_DIM}[number] Enter dir  [..] Up  [q] Exit${NC}\n  "
+            read -r sel
+            case "$sel" in
+                [qQ]) break ;;
+                "..")
+                    CUR_DIR=$(dirname "$CUR_DIR")
+                    ;;
+                [0-9]*)
+                    TARGET=$(echo "$FILES" | cut -d'|' -f$((sel+1)))
+                    [ -d "$TARGET" ] && CUR_DIR="$TARGET"
+                    ;;
+            esac
+        done
+    fi
+}
+
+# ══════════════════════════════════════════════════════════════
+# Filesystem Check
+# ══════════════════════════════════════════════════════════════
+
+check_filesystem() {
+    print_header
+    printf "${C_ACCENT}┌─ Filesystem Check ───────────────────────────────────────────┐${NC}\n\n"
+    printf "  ${C_DIM}Mounted partitions:${NC}\n\n"
+
+    while IFS= read -r line; do
+        dev=$(echo "$line" | awk '{print $1}')
+        mnt=$(echo "$line" | awk '{print $2}')
+        fs=$(echo "$line" | awk '{print $3}')
+        case "$fs" in
+            ext2|ext3|ext4|vfat|f2fs|btrfs|xfs|ntfs|exfat)
+                printf "  ${C_ITEM}%-15s %-15s %-8s${NC}\n" "$dev" "$mnt" "$fs"
+                ;;
+        esac
+    done < /proc/mounts
+
+    printf "\n  ${C_DIM}Disk usage:${NC}\n\n"
+    df -h 2>/dev/null | while IFS= read -r line; do
+        printf "  ${C_ITEM}$line${NC}\n"
+    done
+
+    printf "\n  ${C_DIM}Memory usage:${NC}\n\n"
+    free -h 2>/dev/null | while IFS= read -r line; do
+        printf "  ${C_ITEM}$line${NC}\n"
+    done
+
+    printf "\n  ${C_OK}[✓] Filesystem check complete${NC}\n"
+    printf "${C_ACCENT}└──────────────────────────────────────────────────────────────┘${NC}"
+    press_any_key
+}
+
+# ══════════════════════════════════════════════════════════════
+# System Reset
+# ══════════════════════════════════════════════════════════════
+
+system_reset() {
+    print_header
+    printf "${C_ACCENT}┌─ System Reset ───────────────────────────────────────────────┐${NC}\n"
+    printf "${C_WARN}│                                                              │\n"
+    printf "│  ⚠  This will reset the following:                            │\n"
+    printf "│     • Temporary files (/tmp/*)                                 │\n"
+    printf "│     • Log files (/var/log/*)                                   │\n"
+    printf "│     • Shell history                                            │\n"
+    printf "│                                                              │${NC}\n"
+    printf "${C_ACCENT}└──────────────────────────────────────────────────────────────┘${NC}\n\n"
+
+    if wait_confirm; then
+        printf "\n  ${C_DIM}Resetting...${NC}\n\n"
+        rm -rf /tmp/* 2>/dev/null && printf "  ${C_OK}[✓]${NC} /tmp reset complete\n"
+        if [ -d /var/log ]; then
+            find /var/log -type f -name "*.log" -exec sh -c '> "$1"' _ {} \; 2>/dev/null
+            printf "  ${C_OK}[✓]${NC} Log files reset complete\n"
+        fi
+        for f in /root/.ash_history /root/.bash_history /root/.sh_history; do
+            [ -f "$f" ] && > "$f" 2>/dev/null
+        done
+        printf "  ${C_OK}[✓]${NC} Shell history reset complete\n"
+        printf "\n  ${C_OK}System reset complete.${NC}\n"
+    else
+        printf "\n  ${C_DIM}Cancelled.${NC}\n"
+    fi
+    press_any_key
+}
+
+# ══════════════════════════════════════════════════════════════
+# Network Diagnostics
+# ══════════════════════════════════════════════════════════════
+
+network_diag() {
+    print_header
+    printf "${C_ACCENT}┌─ Network Diagnostics ────────────────────────────────────────┐${NC}\n\n"
+
+    printf "  ${C_DIM}[1] Interfaces:${NC}\n"
+    ip link show 2>/dev/null | grep -E "^[0-9]+:" | while IFS= read -r line; do
+        printf "     ${C_ITEM}$line${NC}\n"
+    done
+
+    printf "\n  ${C_DIM}[2] IP addresses:${NC}\n"
+    ip addr show 2>/dev/null | grep "inet " | while IFS= read -r line; do
+        printf "     ${C_ITEM}$line${NC}\n"
+    done
+
+    printf "\n  ${C_DIM}[3] Gateway:${NC}\n"
+    ip route 2>/dev/null | grep default | while IFS= read -r line; do
+        printf "     ${C_ITEM}$line${NC}\n"
+    done
+
+    printf "\n  ${C_DIM}[4] Connection test:${NC}\n"
+    if ping -c 1 -W 2 127.0.0.1 > /dev/null 2>&1; then
+        printf "     ${C_OK}[✓] localhost OK${NC}\n"
+    fi
+    if ping -c 1 -W 3 8.8.8.8 > /dev/null 2>&1; then
+        printf "     ${C_OK}[✓] Internet connection OK${NC}\n"
+    else
+        printf "     ${C_WARN}[!] No internet (offline)${NC}\n"
+    fi
+
+    printf "\n  ${C_OK}[✓] Network diagnostics complete${NC}\n"
+    printf "${C_ACCENT}└──────────────────────────────────────────────────────────────┘${NC}"
+    press_any_key
+}
+
+# ══════════════════════════════════════════════════════════════
+# System Information
+# ══════════════════════════════════════════════════════════════
+
+system_info() {
+    print_header
+    printf "${C_ACCENT}┌─ System Information ─────────────────────────────────────────┐${NC}\n\n"
+
+    printf "  ${C_DIM}[OS]${NC}\n"
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        printf "     ${C_ITEM}%-12s: %s${NC}\n" "Name" "${PRETTY_NAME:-$NAME}"
+        printf "     ${C_ITEM}%-12s: %s${NC}\n" "Version" "${VERSION:-$VERSION_ID}"
+    fi
+
+    printf "\n  ${C_DIM}[Kernel]${NC}\n"
+    printf "     ${C_ITEM}%-12s: %s${NC}\n" "Version" "$(uname -r)"
+    printf "     ${C_ITEM}%-12s: %s${NC}\n" "Architecture" "$(uname -m)"
+
+    printf "\n  ${C_DIM}[CPU]${NC}\n"
+    if [ -f /proc/cpuinfo ]; then
+        model=$(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^ //')
+        cores=$(grep -c "processor" /proc/cpuinfo)
+        printf "     ${C_ITEM}%-12s: %s${NC}\n" "Model" "${model:-Unknown}"
+        printf "     ${C_ITEM}%-12s: %s cores${NC}\n" "Cores" "$cores"
+    fi
+
+    printf "\n  ${C_DIM}[Memory]${NC}\n"
+    free -h 2>/dev/null | grep -E "^Mem|^Swap" | while IFS= read -r line; do
+        printf "     ${C_ITEM}$line${NC}\n"
+    done
+
+    printf "\n  ${C_DIM}[Uptime]${NC}\n"
+    if [ -f /proc/uptime ]; then
+        up=$(awk '{print int($1)}' /proc/uptime)
+        printf "     ${C_ITEM}%dh %dm %ds${NC}\n" "$((up/3600))" "$(((up%3600)/60))" "$((up%60))"
+    fi
+
+    printf "\n  ${C_DIM}[Boot parameters]${NC}\n"
+    printf "     ${C_ITEM}$(cat /proc/cmdline)${NC}\n"
+
+    printf "\n  ${C_OK}[✓] System information complete${NC}\n"
+    printf "${C_ACCENT}└──────────────────────────────────────────────────────────────┘${NC}"
+    press_any_key
+}
+
+# ══════════════════════════════════════════════════════════════
+# Restart / Shutdown
+# ══════════════════════════════════════════════════════════════
+
+do_reboot() {
+    print_header
+    printf "${C_WARN}  Restarting system...${NC}\n\n"
+    sleep 1
+    reboot 2>/dev/null || echo -e '\x03' > /proc/sysrq-trigger
+}
+
+do_shutdown() {
+    print_header
+    printf "${C_WARN}  Shutting down...${NC}\n\n"
+    sleep 1
+    poweroff 2>/dev/null || halt 2>/dev/null || echo o > /proc/sysrq-trigger
+}
+
+continue_boot() {
+    print_header
+    printf "${C_OK}  Returning to EunOS...${NC}\n\n"
+    sleep 1
+    exec /bin/login -f root
+}
+
+# ══════════════════════════════════════════════════════════════
+# Tools submenu
+# ══════════════════════════════════════════════════════════════
+
+tools_menu() {
+    while true; do
+        print_header
+        printf "  ${C_TITLE}Tools${NC}\n"
+        printf "${C_DIM}  ──────────────────────────────────────────────────────────${NC}\n\n"
+        printf "  ${C_ACCENT}[1]${NC}  Calculator (basic operations + time)\n"
+        printf "  ${C_ACCENT}[2]${NC}  Date/Time Setting (24-hour)\n"
+        printf "  ${C_ACCENT}[3]${NC}  Web Browser (lynx / w3m)\n"
+        printf "  ${C_ACCENT}[4]${NC}  File Manager\n"
+        printf "\n  ${C_DIM}[B]${NC}  Back to previous menu\n"
+        printf "\n${C_DIM}  ──────────────────────────────────────────────────────────${NC}\n"
+        printf "  Select: "
+        read -r choice
+
+        case "$choice" in
+            1) /usr/local/bin/eunos-calc ;;
+            2) /usr/local/bin/eunos-datetime ;;
+            3) /usr/local/bin/eunos-browser ;;
+            4) launch_filemanager ;;
+            [bB]) return ;;
+            *) printf "\n  ${C_ERR}Invalid selection.${NC}\n"; sleep 1 ;;
+        esac
+    done
+}
+
+# ══════════════════════════════════════════════════════════════
+# Troubleshoot submenu
+# ══════════════════════════════════════════════════════════════
+
+troubleshoot_menu() {
+    while true; do
+        print_header
+        printf "  ${C_TITLE}Troubleshoot${NC}\n"
+        printf "${C_DIM}  ──────────────────────────────────────────────────────────${NC}\n\n"
+        printf "  ${C_ACCENT}[1]${NC}  Admin CMD (including C:/D:/X: drive mount)\n"
+        printf "  ${C_ACCENT}[2]${NC}  Filesystem Check\n"
+        printf "  ${C_ACCENT}[3]${NC}  System Reset\n"
+        printf "  ${C_ACCENT}[4]${NC}  Network Diagnostics\n"
+        printf "  ${C_ACCENT}[5]${NC}  System Information\n"
+        printf "\n  ${C_DIM}[B]${NC}  Back to previous menu\n"
+        printf "\n${C_DIM}  ──────────────────────────────────────────────────────────${NC}\n"
+        printf "  Select: "
+        read -r choice
+
+        case "$choice" in
+            1) launch_cmd ;;
+            2) check_filesystem ;;
+            3) system_reset ;;
+            4) network_diag ;;
+            5) system_info ;;
+            [bB]) return ;;
+            *) printf "\n  ${C_ERR}Invalid selection.${NC}\n"; sleep 1 ;;
+        esac
+    done
+}
+
+# ══════════════════════════════════════════════════════════════
+# Main menu
+# ══════════════════════════════════════════════════════════════
+
+main_menu() {
+    while true; do
+        print_header
+        printf "  Select an option:\n"
+        printf "${C_DIM}  ──────────────────────────────────────────────────────────${NC}\n\n"
+        printf "  ${C_OK}[1]${NC}  Continue to EunOS\n"
+        printf "\n"
+        printf "  ${C_WARN}[2]${NC}  Troubleshoot\n"
+        printf "       ${C_DIM}→ Admin CMD, Filesystem Check, System Reset, Network Diagnostics${NC}\n"
+        printf "\n"
+        printf "  ${C_ACCENT}[3]${NC}  Tools\n"
+        printf "       ${C_DIM}→ Calculator, Date/Time Setting, Web Browser, File Manager${NC}\n"
+        printf "\n"
+        printf "  ${C_ITEM}[4]${NC}  System Information\n"
+        printf "\n"
+        printf "  ${C_DIM}[R]${NC}  Restart\n"
+        printf "  ${C_DIM}[S]${NC}  Shutdown\n"
+        printf "\n${C_DIM}  ──────────────────────────────────────────────────────────${NC}\n"
+        printf "  Select: "
+        read -r choice
+
+        case "$choice" in
+            1) continue_boot ;;
+            2) troubleshoot_menu ;;
+            3) tools_menu ;;
+            4) system_info ;;
+            [rR]) do_reboot ;;
+            [sS]) do_shutdown ;;
+            *) printf "\n  ${C_ERR}Invalid selection.${NC}\n"; sleep 1 ;;
+        esac
+    done
+}
+
+# ── Entry point ────────────────────────────────────────────────────
+main_menu

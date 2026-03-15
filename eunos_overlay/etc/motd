@@ -1,0 +1,15 @@
+
+  ███████╗██╗   ██╗███╗   ██╗ ██████╗ ███████╗
+  ██╔════╝██║   ██║████╗  ██║██╔═══██╗██╔════╝
+  █████╗  ██║   ██║██╔██╗ ██║██║   ██║███████╗
+  ██╔══╝  ██║   ██║██║╚██╗██║██║   ██║╚════██║
+  ███████╗╚██████╔╝██║ ╚████║╚██████╔╝███████║
+  ╚══════╝ ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝
+           Version 1.0.0 "Harmony"
+
+  Apps:    calc  browser  fm  settings
+  Network: wifi  net  ping  wget
+  System:  info  shutdown  restart  help
+
+  Type 'help' for full command list.
+

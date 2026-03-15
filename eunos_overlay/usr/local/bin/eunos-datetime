@@ -1,0 +1,202 @@
+#!/bin/sh
+# EunOS Date/Time Setting - 24-hour format
+
+C_BOX='\033[1;36m'
+C_TITLE='\033[1;37m'
+C_OK='\033[1;32m'
+C_WARN='\033[1;33m'
+C_ERR='\033[1;31m'
+C_DIM='\033[2;37m'
+C_ACCENT='\033[1;35m'
+NC='\033[0m'
+
+draw_header() {
+    clear
+    NOW=$(date '+%Y-%m-%d')
+    TIME=$(date '+%H:%M:%S')
+    DAY=$(date '+%A')
+    printf "${C_BOX}"
+    printf "╔══════════════════════════════════════════╗\n"
+    printf "║   ${C_TITLE}EunOS Date/Time Setting${C_BOX}               ║\n"
+    printf "╠══════════════════════════════════════════╣\n"
+    printf "║  ${C_DIM}Current date:${C_ACCENT} %-10s  ${C_DIM}(%s)${C_BOX}  ║\n" "$NOW" "$DAY"
+    printf "║  ${C_DIM}Current time:${C_ACCENT} %-8s  ${C_DIM}(24-hour)${C_BOX}    ║\n" "$TIME"
+    printf "╠══════════════════════════════════════════╣\n"
+    printf "${NC}"
+}
+
+show_menu() {
+    draw_header
+    printf "${C_BOX}║  ${C_TITLE}Menu${C_BOX}                                      ║\n"
+    printf "║                                          ║\n"
+    printf "║  ${C_ACCENT}[1]${C_BOX} Set Date (YYYY-MM-DD)               ║\n"
+    printf "║  ${C_ACCENT}[2]${C_BOX} Set Time (HH:MM:SS, 24-hour)        ║\n"
+    printf "║  ${C_ACCENT}[3]${C_BOX} Set Date+Time at once               ║\n"
+    printf "║  ${C_ACCENT}[4]${C_BOX} NTP Sync (network required)         ║\n"
+    printf "║                                          ║\n"
+    printf "║  ${C_DIM}[Q]${C_BOX} Exit                                  ║\n"
+    printf "╚══════════════════════════════════════════╝\n"
+    printf "${NC}"
+    printf "  ${C_ACCENT}Select: ${NC}"
+}
+
+set_date_only() {
+    draw_header
+    printf "${C_BOX}║  ${C_TITLE}Set Date${C_BOX}                                  ║\n"
+    printf "║  ${C_DIM}Format: YYYY-MM-DD  e.g. 2025-12-25${C_BOX}     ║\n"
+    printf "╚══════════════════════════════════════════╝${NC}\n\n"
+    printf "  ${C_ACCENT}Enter new date (blank=cancel): ${NC}"
+    read -r newdate
+
+    [ -z "$newdate" ] && return
+
+    # Format validation
+    if ! echo "$newdate" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+        printf "  ${C_ERR}Error: Use YYYY-MM-DD format.${NC}\n"
+        sleep 2
+        return
+    fi
+
+    YEAR=$(echo "$newdate" | cut -d- -f1)
+    MON=$(echo "$newdate" | cut -d- -f2)
+    DAY=$(echo "$newdate" | cut -d- -f3)
+    CUR_TIME=$(date '+%H:%M:%S')
+    HH=$(echo "$CUR_TIME" | cut -d: -f1)
+    MM=$(echo "$CUR_TIME" | cut -d: -f2)
+    SS=$(echo "$CUR_TIME" | cut -d: -f3)
+
+    # date -s "YYYY-MM-DD HH:MM:SS" (busybox style)
+    if date -s "${YEAR}-${MON}-${DAY} ${HH}:${MM}:${SS}" > /dev/null 2>&1; then
+        printf "  ${C_OK}[✓] Date set: ${YEAR}-${MON}-${DAY}${NC}\n"
+        # Try hwclock sync
+        hwclock -w 2>/dev/null && printf "  ${C_OK}[✓] Hardware clock synced${NC}\n"
+    else
+        printf "  ${C_ERR}Error: Failed to set date. (root required)${NC}\n"
+    fi
+    sleep 2
+}
+
+set_time_only() {
+    draw_header
+    printf "${C_BOX}║  ${C_TITLE}Set Time (24-hour)${C_BOX}                        ║\n"
+    printf "║  ${C_DIM}Format: HH:MM:SS  e.g. 14:30:00${C_BOX}          ║\n"
+    printf "╚══════════════════════════════════════════╝${NC}\n\n"
+    printf "  ${C_ACCENT}Enter new time (blank=cancel): ${NC}"
+    read -r newtime
+
+    [ -z "$newtime" ] && return
+
+    # Allow HH:MM or HH:MM:SS
+    if ! echo "$newtime" | grep -qE '^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$'; then
+        printf "  ${C_ERR}Error: Use HH:MM or HH:MM:SS format.${NC}\n"
+        sleep 2
+        return
+    fi
+
+    # Append :00 if seconds are missing
+    echo "$newtime" | grep -q ':[0-9][0-9]:[0-9][0-9]$' || newtime="${newtime}:00"
+
+    CUR_DATE=$(date '+%Y-%m-%d')
+
+    if date -s "${CUR_DATE} ${newtime}" > /dev/null 2>&1; then
+        printf "  ${C_OK}[✓] Time set: ${newtime}${NC}\n"
+        hwclock -w 2>/dev/null && printf "  ${C_OK}[✓] Hardware clock synced${NC}\n"
+    else
+        printf "  ${C_ERR}Error: Failed to set time. (root required)${NC}\n"
+    fi
+    sleep 2
+}
+
+set_datetime() {
+    draw_header
+    printf "${C_BOX}║  ${C_TITLE}Set Date+Time${C_BOX}                             ║\n"
+    printf "║  ${C_DIM}Format: YYYY-MM-DD HH:MM:SS${C_BOX}              ║\n"
+    printf "║  ${C_DIM}e.g.  2025-12-25 14:30:00${C_BOX}                ║\n"
+    printf "╚══════════════════════════════════════════╝${NC}\n\n"
+    printf "  ${C_ACCENT}Enter date+time (blank=cancel): ${NC}"
+    read -r input
+
+    [ -z "$input" ] && return
+
+    if ! echo "$input" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$'; then
+        printf "  ${C_ERR}Error: Use YYYY-MM-DD HH:MM:SS format.${NC}\n"
+        sleep 2
+        return
+    fi
+
+    echo "$input" | grep -qE '[0-5][0-9]$' || input="${input}:00"
+
+    if date -s "$input" > /dev/null 2>&1; then
+        printf "  ${C_OK}[✓] Setting complete: $input${NC}\n"
+        hwclock -w 2>/dev/null && printf "  ${C_OK}[✓] Hardware clock synced${NC}\n"
+    else
+        printf "  ${C_ERR}Error: Setting failed (root required)${NC}\n"
+    fi
+    sleep 2
+}
+
+ntp_sync() {
+    draw_header
+    printf "${C_BOX}║  ${C_TITLE}NTP Time Sync${C_BOX}                             ║\n"
+    printf "╚══════════════════════════════════════════╝${NC}\n\n"
+    printf "  ${C_DIM}Checking network connection...${NC}\n"
+
+    if ! ping -c 1 -W 3 8.8.8.8 > /dev/null 2>&1; then
+        printf "  ${C_ERR}[✗] No internet. NTP sync unavailable.${NC}\n"
+        sleep 2
+        return
+    fi
+
+    printf "  ${C_OK}[✓] Network connected${NC}\n"
+    printf "  ${C_DIM}Syncing with NTP server...${NC}\n"
+
+    # Try ntpd or chronyd
+    if command -v ntpd > /dev/null 2>&1; then
+        ntpd -d -n -q -p pool.ntp.org 2>/dev/null &
+        PID=$!
+        i=0
+        while kill -0 "$PID" 2>/dev/null && [ $i -lt 30 ]; do
+            printf "\r  ${C_ACCENT}[%.0s]${NC} Syncing... ${i}s" "$i"
+            sleep 1
+            i=$((i+1))
+        done
+        printf "\n"
+    elif command -v chronyd > /dev/null 2>&1; then
+        chronyd -q "pool pool.ntp.org iburst" 2>/dev/null
+    else
+        printf "  ${C_WARN}[!] No ntpd/chronyd. Trying manual rdate...${NC}\n"
+        if command -v rdate > /dev/null 2>&1; then
+            rdate -s time.google.com 2>/dev/null
+        else
+            printf "  ${C_ERR}[✗] NTP client not found.${NC}\n"
+            sleep 2
+            return
+        fi
+    fi
+
+    hwclock -w 2>/dev/null
+    printf "  ${C_OK}[✓] Sync complete: $(date '+%Y-%m-%d %H:%M:%S')${NC}\n"
+    sleep 2
+}
+
+# Main loop
+while true; do
+    show_menu
+    read -r choice
+
+    case "$choice" in
+        1) set_date_only ;;
+        2) set_time_only ;;
+        3) set_datetime ;;
+        4) ntp_sync ;;
+        [qQ]|exit|quit)
+            clear
+            printf "${C_OK}  Exiting date/time settings.${NC}\n\n"
+            exit 0
+            ;;
+        *)
+            printf "  ${C_ERR}Invalid selection.${NC}\n"
+            sleep 1
+            ;;
+    esac
+done

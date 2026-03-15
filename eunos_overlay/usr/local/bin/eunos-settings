@@ -1,0 +1,112 @@
+#!/bin/sh
+# eunos-settings - EunOS Settings Menu
+
+CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+WHITE='\033[1;37m'
+NC='\033[0m'
+
+show_menu() {
+    clear
+    printf "${CYAN}"
+    echo "  ╔══════════════════════════════════╗"
+    echo "  ║       EunOS Settings             ║"
+    echo "  ╚══════════════════════════════════╝"
+    printf "${NC}"
+    echo ""
+    printf "  ${GREEN}[1]${NC} Network Settings\n"
+    printf "  ${GREEN}[2]${NC} Date / Time\n"
+    printf "  ${GREEN}[3]${NC} System Information\n"
+    printf "  ${GREEN}[4]${NC} Change Hostname\n"
+    printf "  ${GREEN}[5]${NC} Change Password\n"
+    printf "  ${GREEN}[6]${NC} Install Packages\n"
+    printf "  ${GREEN}[7]${NC} System Reset\n"
+    printf "  ${RED}[0]${NC} Exit\n"
+    echo ""
+    printf "  Select: "
+}
+
+network_settings() {
+    clear
+    printf "${CYAN}  Network Settings${NC}\n"
+    echo "  ─────────────────────────────"
+    echo ""
+    echo "  Current interfaces:"
+    ip addr show 2>/dev/null | grep -E "^[0-9]|inet " | sed 's/^/    /'
+    echo ""
+    printf "  ${GREEN}[1]${NC} Connect (DHCP auto)\n"
+    printf "  ${GREEN}[2]${NC} Show IP address\n"
+    printf "  ${GREEN}[3]${NC} Network diagnostics\n"
+    printf "  ${GREEN}[0]${NC} Back\n"
+    echo ""
+    printf "  Select: "
+    read choice
+    case "$choice" in
+        1)
+            echo "  Connecting..."
+            for iface in eth0 eth1 ens3 ens4 enp0s3; do
+                if ip link show "$iface" 2>/dev/null | grep -q "state"; then
+                    udhcpc -i "$iface" -q 2>/dev/null && \
+                        printf "  ${GREEN}Connected on $iface${NC}\n" && break
+                fi
+            done
+            echo "  Press Enter..."
+            read dummy
+            ;;
+        2)
+            echo ""
+            ip addr show | grep "inet " | awk '{print "    IP: "$2}'
+            echo ""
+            echo "  Press Enter..."
+            read dummy
+            ;;
+        3) eunos-recovery 2>/dev/null || echo "  Not available." ; read dummy ;;
+    esac
+}
+
+change_hostname() {
+    echo ""
+    printf "  Current hostname: $(hostname)\n"
+    printf "  New hostname (blank=cancel): "
+    read new_host
+    if [ -n "$new_host" ]; then
+        hostname "$new_host"
+        echo "$new_host" > /etc/hostname
+        printf "  ${GREEN}Hostname changed to: $new_host${NC}\n"
+    else
+        echo "  Cancelled."
+    fi
+    echo "  Press Enter..."
+    read dummy
+}
+
+while true; do
+    show_menu
+    read choice
+    case "$choice" in
+        1) network_settings ;;
+        2) eunos-datetime ;;
+        3) eunos-info ;;
+        4) change_hostname ;;
+        5) passwd ;;
+        6) eunos-install ;;
+        7)
+            printf "  ${RED}Reset temp files, logs, history? [y/N]: ${NC}"
+            read ans
+            if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+                rm -rf /tmp/* 2>/dev/null
+                rm -rf /var/log/* 2>/dev/null
+                history -c 2>/dev/null
+                echo "  Reset complete."
+            else
+                echo "  Cancelled."
+            fi
+            echo "  Press Enter..."
+            read dummy
+            ;;
+        0|q|Q) echo ""; break ;;
+        *) echo "  Invalid selection." ; sleep 1 ;;
+    esac
+done

@@ -1,0 +1,241 @@
+#!/bin/sh
+# eunfm - EunOS TUI File Manager
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Current directory
+CWD="$(pwd)"
+SELECTED=0
+OFFSET=0
+
+# Terminal size
+get_term_size() {
+    ROWS=$(stty size 2>/dev/null | awk '{print $1}' || echo 24)
+    COLS=$(stty size 2>/dev/null | awk '{print $2}' || echo 80)
+    VISIBLE_ROWS=$((ROWS - 6))
+}
+
+# File icons
+get_icon() {
+    FILE="$1"
+    if [ -d "$FILE" ]; then
+        printf "📁"
+        return
+    fi
+    EXT="${FILE##*.}"
+    EXT_LOWER=$(echo "$EXT" | tr '[:upper:]' '[:lower:]')
+    case "$EXT_LOWER" in
+        sh|bash)      printf "📜" ;;
+        py)           printf "🐍" ;;
+        js|ts)        printf "📄" ;;
+        html|htm)     printf "🌐" ;;
+        c|cpp|h|hpp)  printf "⚙️ " ;;
+        go)           printf "🐹" ;;
+        rs)           printf "🦀" ;;
+        txt|md|rst)   printf "📝" ;;
+        pdf)          printf "📕" ;;
+        png|jpg|jpeg|gif|bmp|webp) printf "🖼️ " ;;
+        mp3|flac|ogg|wav) printf "🎵" ;;
+        mp4|mkv|avi|mov)  printf "🎬" ;;
+        zip|tar|gz|bz2|xz|7z|rar) printf "📦" ;;
+        exe|dll)      printf "🪟" ;;
+        iso|img)      printf "💿" ;;
+        json|yaml|yml|xml) printf "📋" ;;
+        sql|db|sqlite) printf "🗄️ " ;;
+        *)            printf "📄" ;;
+    esac
+}
+
+# File size format
+format_size() {
+    SIZE="$1"
+    if [ -z "$SIZE" ] || [ "$SIZE" -lt 1024 ] 2>/dev/null; then
+        echo "${SIZE}B"
+    elif [ "$SIZE" -lt 1048576 ]; then
+        echo "$((SIZE / 1024))K"
+    elif [ "$SIZE" -lt 1073741824 ]; then
+        echo "$((SIZE / 1048576))M"
+    else
+        echo "$((SIZE / 1073741824))G"
+    fi
+}
+
+# Get file list
+get_files() {
+    # Always include ..
+    FILES=".."
+    while IFS= read -r f; do
+        FILES="$FILES
+$f"
+    done << EOF
+$(ls -1a "$CWD" 2>/dev/null | grep -v '^\.\.$' | grep -v '^\.$')
+EOF
+}
+
+# Clear screen and print header
+draw_header() {
+    clear
+    printf "${BOLD}${CYAN}  ╔═══════════════════════════════════════════════════╗${NC}\n"
+    printf "${BOLD}${CYAN}  ║  ${WHITE}EunFM${CYAN} - EunOS File Manager                        ║${NC}\n"
+    printf "${BOLD}${CYAN}  ╚═══════════════════════════════════════════════════╝${NC}\n"
+    printf "  ${YELLOW}Location:${NC} ${CWD}\n"
+    printf "  ${BLUE}↑↓${NC}Move  ${BLUE}Enter${NC}Open  ${BLUE}d${NC}Delete  ${BLUE}m${NC}NewFolder  ${BLUE}r${NC}Refresh  ${BLUE}q${NC}Exit\n"
+    echo "  ─────────────────────────────────────────────────────"
+}
+
+# Print file list
+draw_files() {
+    get_term_size
+    FILE_LIST=$(ls -1a "$CWD" 2>/dev/null)
+    TOTAL=$(echo "$FILE_LIST" | wc -l)
+
+    # Adjust selection
+    [ "$SELECTED" -lt 0 ] && SELECTED=0
+    [ "$SELECTED" -ge "$TOTAL" ] && SELECTED=$((TOTAL - 1))
+
+    # Adjust offset
+    [ "$SELECTED" -lt "$OFFSET" ] && OFFSET="$SELECTED"
+    [ "$SELECTED" -ge "$((OFFSET + VISIBLE_ROWS))" ] && OFFSET=$((SELECTED - VISIBLE_ROWS + 1))
+
+    I=0
+    echo "$FILE_LIST" | while IFS= read -r ENTRY; do
+        if [ "$I" -ge "$OFFSET" ] && [ "$I" -lt "$((OFFSET + VISIBLE_ROWS))" ]; then
+            FULL_PATH="$CWD/$ENTRY"
+            ICON=$(get_icon "$FULL_PATH")
+
+            if [ -d "$FULL_PATH" ]; then
+                COLOR="${BLUE}"
+                INFO="<DIR>"
+            elif [ -x "$FULL_PATH" ]; then
+                COLOR="${GREEN}"
+                SIZE=$(wc -c < "$FULL_PATH" 2>/dev/null || echo 0)
+                INFO=$(format_size "$SIZE")
+            else
+                COLOR="${WHITE}"
+                SIZE=$(wc -c < "$FULL_PATH" 2>/dev/null || echo 0)
+                INFO=$(format_size "$SIZE")
+            fi
+
+            if [ "$I" -eq "$SELECTED" ]; then
+                printf "  ${BOLD}\033[7m  %s %-40s %8s  \033[0m\n" "$ICON" "$ENTRY" "$INFO"
+            else
+                printf "  ${COLOR}  %s %-40s %8s${NC}\n" "$ICON" "$ENTRY" "$INFO"
+            fi
+        fi
+        I=$((I + 1))
+    done
+
+    echo "  ─────────────────────────────────────────────────────"
+    printf "  File %d/%d\n" "$((SELECTED + 1))" "$TOTAL"
+}
+
+# Get selected filename
+get_selected() {
+    ls -1a "$CWD" 2>/dev/null | sed -n "$((SELECTED + 1))p"
+}
+
+# Main loop
+main() {
+    # Terminal raw mode
+    OLD_STTY=$(stty -g 2>/dev/null)
+    stty -echo -icanon min 1 time 0 2>/dev/null
+
+    while true; do
+        draw_header
+        draw_files
+
+        # Read key
+        KEY=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
+
+        case "$KEY" in
+            71)  # q - Exit
+                break
+                ;;
+            0a|0d)  # Enter - Open
+                ENTRY=$(get_selected)
+                FULL="$CWD/$ENTRY"
+                if [ -d "$FULL" ]; then
+                    CWD=$(cd "$FULL" && pwd)
+                    SELECTED=0
+                    OFFSET=0
+                else
+                    stty "$OLD_STTY" 2>/dev/null
+                    echo ""
+                    eunos-open "$FULL"
+                    echo ""
+                    echo "  Press any key..."
+                    dd bs=1 count=1 2>/dev/null
+                    stty -echo -icanon min 1 time 0 2>/dev/null
+                fi
+                ;;
+            1b)  # ESC sequence (arrow keys)
+                K2=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
+                K3=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
+                case "$K2$K3" in
+                    5b41)  # Up arrow
+                        SELECTED=$((SELECTED - 1))
+                        [ "$SELECTED" -lt 0 ] && SELECTED=0
+                        ;;
+                    5b42)  # Down arrow
+                        TOTAL=$(ls -1a "$CWD" 2>/dev/null | wc -l)
+                        SELECTED=$((SELECTED + 1))
+                        [ "$SELECTED" -ge "$TOTAL" ] && SELECTED=$((TOTAL - 1))
+                        ;;
+                esac
+                ;;
+            6b)  # k - Up
+                SELECTED=$((SELECTED - 1))
+                [ "$SELECTED" -lt 0 ] && SELECTED=0
+                ;;
+            6a)  # j - Down
+                TOTAL=$(ls -1a "$CWD" 2>/dev/null | wc -l)
+                SELECTED=$((SELECTED + 1))
+                [ "$SELECTED" -ge "$TOTAL" ] && SELECTED=$((TOTAL - 1))
+                ;;
+            64)  # d - Delete
+                ENTRY=$(get_selected)
+                stty "$OLD_STTY" 2>/dev/null
+                printf "  Delete '%s'? [y/N] " "$ENTRY"
+                read CONFIRM
+                if [ "$CONFIRM" = "y" ] || [ "$CONFIRM" = "Y" ]; then
+                    rm -rf "$CWD/$ENTRY"
+                    echo "  Deleted: $ENTRY"
+                fi
+                stty -echo -icanon min 1 time 0 2>/dev/null
+                ;;
+            6d)  # m - Create folder
+                stty "$OLD_STTY" 2>/dev/null
+                printf "  New folder name: "
+                read DIRNAME
+                if [ -n "$DIRNAME" ]; then
+                    mkdir -p "$CWD/$DIRNAME"
+                    echo "  Created: $DIRNAME"
+                fi
+                stty -echo -icanon min 1 time 0 2>/dev/null
+                ;;
+            72)  # r - Refresh
+                SELECTED=0
+                OFFSET=0
+                ;;
+            68)  # h - Home
+                CWD="$HOME"
+                SELECTED=0
+                OFFSET=0
+                ;;
+        esac
+    done
+
+    stty "$OLD_STTY" 2>/dev/null
+    clear
+    echo "EunFM exiting."
+}
+
+main

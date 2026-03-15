@@ -1,0 +1,173 @@
+#!/bin/sh
+# eunos-wifi - EunOS WiFi Manager
+
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+# wpa_supplicant 설치 확인
+check_deps() {
+    if ! command -v wpa_supplicant >/dev/null 2>&1; then
+        printf "${YELLOW}  Installing WiFi tools...${NC}\n"
+        apk add --quiet wpa_supplicant iw wireless-tools 2>/dev/null
+        if ! command -v wpa_supplicant >/dev/null 2>&1; then
+            printf "${RED}  Failed to install wpa_supplicant.${NC}\n"
+            printf "${YELLOW}  Try: apk add wpa_supplicant iw${NC}\n"
+            exit 1
+        fi
+    fi
+}
+
+# 무선 인터페이스 찾기
+find_iface() {
+    for iface in wlan0 wlan1 wlp2s0 wlp3s0 wlp4s0; do
+        if ip link show "$iface" 2>/dev/null | grep -q "state"; then
+            echo "$iface"
+            return
+        fi
+    done
+    # iw로 탐색
+    iw dev 2>/dev/null | grep "Interface" | awk '{print $2}' | head -1
+}
+
+# 네트워크 스캔
+scan_networks() {
+    local iface="$1"
+    printf "${CYAN}  Scanning for WiFi networks...${NC}\n"
+    ip link set "$iface" up 2>/dev/null
+    iw dev "$iface" scan 2>/dev/null | grep -E "SSID:|signal:" | \
+        sed 's/.*SSID: /  SSID: /;s/.*signal: /  Signal: /' | \
+        grep -v "^  SSID: $" | head -30
+}
+
+# WPA 설정 파일 생성 및 연결
+connect_wpa() {
+    local iface="$1"
+    local ssid="$2"
+    local pass="$3"
+    local conf="/tmp/wpa_eunos.conf"
+
+    cat > "$conf" << WPAEOF
+ctrl_interface=/var/run/wpa_supplicant
+network={
+    ssid="$ssid"
+    psk="$pass"
+    key_mgmt=WPA-PSK
+}
+WPAEOF
+
+    killall wpa_supplicant 2>/dev/null
+    sleep 1
+    wpa_supplicant -B -i "$iface" -c "$conf" 2>/dev/null
+    sleep 3
+    udhcpc -i "$iface" -q -n -t 5 2>/dev/null
+}
+
+# 열린 네트워크 연결
+connect_open() {
+    local iface="$1"
+    local ssid="$2"
+    local conf="/tmp/wpa_eunos.conf"
+
+    cat > "$conf" << WPAEOF
+ctrl_interface=/var/run/wpa_supplicant
+network={
+    ssid="$ssid"
+    key_mgmt=NONE
+}
+WPAEOF
+
+    killall wpa_supplicant 2>/dev/null
+    sleep 1
+    wpa_supplicant -B -i "$iface" -c "$conf" 2>/dev/null
+    sleep 3
+    udhcpc -i "$iface" -q -n -t 5 2>/dev/null
+}
+
+# ── 메인 ──────────────────────────────────────────
+clear
+printf "${CYAN}  ╔══════════════════════════════════╗${NC}\n"
+printf "${CYAN}  ║       EunOS WiFi Manager         ║${NC}\n"
+printf "${CYAN}  ╚══════════════════════════════════╝${NC}\n"
+echo ""
+
+check_deps
+
+IFACE=$(find_iface)
+if [ -z "$IFACE" ]; then
+    printf "${RED}  No wireless interface found.${NC}\n"
+    printf "  Check: lsmod | grep -i wifi\n"
+    exit 1
+fi
+
+printf "  Interface: ${GREEN}$IFACE${NC}\n"
+echo ""
+
+while true; do
+    printf "${YELLOW}  [1]${NC} Scan & Connect\n"
+    printf "${YELLOW}  [2]${NC} Enter SSID manually\n"
+    printf "${YELLOW}  [3]${NC} Show current status\n"
+    printf "${YELLOW}  [0]${NC} Exit\n"
+    echo ""
+    printf "  Select: "
+    read choice
+
+    case "$choice" in
+        1)
+            echo ""
+            scan_networks "$IFACE"
+            echo ""
+            printf "  Enter SSID: "
+            read ssid
+            [ -z "$ssid" ] && continue
+            printf "  Password (blank=open network): "
+            read -s pass
+            echo ""
+            echo ""
+            printf "${YELLOW}  Connecting to '$ssid'...${NC}\n"
+            if [ -z "$pass" ]; then
+                connect_open "$IFACE" "$ssid"
+            else
+                connect_wpa "$IFACE" "$ssid" "$pass"
+            fi
+            IP=$(ip addr show "$IFACE" 2>/dev/null | grep "inet " | awk '{print $2}')
+            if [ -n "$IP" ]; then
+                printf "${GREEN}  Connected!  IP: $IP${NC}\n"
+            else
+                printf "${RED}  Connection failed. Check SSID/password.${NC}\n"
+            fi
+            echo ""
+            ;;
+        2)
+            printf "  SSID: "
+            read ssid
+            [ -z "$ssid" ] && continue
+            printf "  Password (blank=open): "
+            read -s pass
+            echo ""
+            echo ""
+            if [ -z "$pass" ]; then
+                connect_open "$IFACE" "$ssid"
+            else
+                connect_wpa "$IFACE" "$ssid" "$pass"
+            fi
+            IP=$(ip addr show "$IFACE" 2>/dev/null | grep "inet " | awk '{print $2}')
+            if [ -n "$IP" ]; then
+                printf "${GREEN}  Connected!  IP: $IP${NC}\n"
+            else
+                printf "${RED}  Failed. Check SSID/password.${NC}\n"
+            fi
+            echo ""
+            ;;
+        3)
+            echo ""
+            iw dev "$IFACE" link 2>/dev/null || echo "  Not connected"
+            ip addr show "$IFACE" 2>/dev/null | grep "inet "
+            echo ""
+            ;;
+        0|q|Q) echo ""; break ;;
+        *) echo "  Invalid selection." ;;
+    esac
+done
