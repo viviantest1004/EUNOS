@@ -4,7 +4,7 @@
 
 ## Download
 
-EunOS ISO 파일을 다운로드할 수 있는 웹사이트입니다.
+Download the EunOS ISO file from the official download page.
 
 **[https://eunos-download.surge.sh](https://eunos-download.surge.sh)**
 
