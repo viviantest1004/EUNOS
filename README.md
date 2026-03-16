@@ -2,6 +2,10 @@
 
 > A custom Linux-based operating system, entirely built by **Claude Code** (Anthropic's AI coding assistant).
 
+## Download
+
+**[https://eunos-download.surge.sh](https://eunos-download.surge.sh)**
+
 ![EunOS Boot](screenshots/boot-selector.png)
 
 ## What is EunOS?
