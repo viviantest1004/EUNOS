@@ -10,15 +10,14 @@ echo ""
 printf "${YELLOW}  Connecting to network...${NC}\n"
 
 connected=0
-for iface in eth0 eth1 ens3 ens4 enp0s3 enp0s4; do
-    if ip link show "$iface" 2>/dev/null | grep -q "state"; then
-        ip link set "$iface" up 2>/dev/null
-        if udhcpc -i "$iface" -q -n 2>/dev/null; then
-            IP=$(ip addr show "$iface" 2>/dev/null | grep "inet " | awk '{print $2}')
-            printf "${GREEN}  Connected!  Interface: $iface  IP: $IP${NC}\n"
-            connected=1
-            break
-        fi
+# 모든 이더넷 인터페이스 자동 탐색 (lo 제외)
+for iface in $(ip link show 2>/dev/null | grep -E "^[0-9]+:" | awk -F': ' '{print $2}' | grep -v lo | grep -v wlan); do
+    ip link set "$iface" up 2>/dev/null
+    if udhcpc -i "$iface" -q -n -t 5 2>/dev/null; then
+        IP=$(ip addr show "$iface" 2>/dev/null | grep "inet " | awk '{print $2}')
+        printf "${GREEN}  Connected!  Interface: $iface  IP: $IP${NC}\n"
+        connected=1
+        break
     fi
 done
 
