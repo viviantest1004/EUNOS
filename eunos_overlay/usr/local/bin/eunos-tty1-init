@@ -2,14 +2,12 @@
 # EunOS tty1 initialization script
 # Check kernel parameters and branch to Recovery Mode or Boot Selector
 
-# Auto network setup (QEMU virtio)
-for iface in $(ip link show 2>/dev/null | grep -E "^[0-9]+:" | awk -F': ' '{print $2}' | grep -v lo | grep -v wlan); do
-    ip link set "$iface" up 2>/dev/null
-    ip addr add 10.0.2.15/24 dev "$iface" 2>/dev/null
-    ip route add default via 10.0.2.2 2>/dev/null
-    echo "nameserver 8.8.8.8" > /etc/resolv.conf
-    break
-done
+# Auto network setup
+sleep 2
+ip link set eth0 up 2>/dev/null
+ip addr add 10.0.2.15/24 dev eth0 2>/dev/null
+ip route add default via 10.0.2.2 2>/dev/null
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
 
 if grep -q 'eunos\.recovery=1' /proc/cmdline 2>/dev/null; then
     exec /usr/local/bin/eunos-recovery
