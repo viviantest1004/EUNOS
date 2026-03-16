@@ -1,9 +1,4 @@
-# ISO files (too large for GitHub)
 *.iso
-
-# Build artifacts
-build/iso_work/
-build/apkovl/
-
-# macOS
+*.iso.xz
+build/
 .DS_Store
