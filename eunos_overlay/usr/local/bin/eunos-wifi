@@ -93,14 +93,15 @@ printf "${CYAN}  ║       EunOS WiFi Manager         ║${NC}\n"
 printf "${CYAN}  ╚══════════════════════════════════╝${NC}\n"
 echo ""
 
-check_deps
-
 IFACE=$(find_iface)
 if [ -z "$IFACE" ]; then
     printf "${RED}  No wireless interface found.${NC}\n"
-    printf "  Check: lsmod | grep -i wifi\n"
+    printf "  WiFi is not supported in virtual machines (QEMU).\n"
+    printf "  Use 'net' command for ethernet/internet instead.\n"
     exit 1
 fi
+
+check_deps
 
 printf "  Interface: ${GREEN}$IFACE${NC}\n"
 echo ""
