@@ -1,0 +1,4 @@
+bootloader/grub/grub.cfg linguist-language=GRUB
+bootloader/syslinux/syslinux.cfg linguist-language=Syslinux
+eunos_overlay/etc/os-release linguist-language=INI
+eunos_overlay/etc/inittab linguist-language=Shell
