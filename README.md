@@ -12,9 +12,18 @@ Download the EunOS ISO file from the official download page.
 
 ## What is EunOS?
 
-EunOS is a lightweight custom OS built on top of **Alpine Linux**, designed to run as a live system from USB or CD/DVD. It features a custom terminal environment with built-in apps, recovery tools, and network support.
+EunOS is a lightweight custom OS built on top of **Alpine Linux**, designed to run as a live system from USB or CD/DVD.
 
-Everything — from the shell scripts and commands to the bootloader configuration and build system — was written by **Claude Code**.
+It takes Alpine Linux as a base — keeping all its core functionality (package management, filesystem, networking) — and adds a fully custom layer on top:
+
+- A custom boot selector screen (Normal Mode / Recovery Mode)
+- A custom terminal UI with ASCII logo on boot
+- Built-in apps: calculator, text browser, file manager, settings menu
+- Network tools: WiFi manager, Ethernet connection
+- A full Recovery Environment with filesystem check, network diagnostics, and system reset
+- Custom utilities: datetime, file editor, system info
+
+Everything on top of Alpine — shell scripts, commands, bootloader config, and build system — was written by **Claude Code**.
 
 ---
 
