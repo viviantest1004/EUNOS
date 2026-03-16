@@ -24,16 +24,19 @@ echo ""
 
 # Auto internet connect
 printf "  Connecting to network..."
+_net_ok=0
 for iface in eth0 eth1 ens3 ens4 enp0s3; do
     if ip link show "$iface" 2>/dev/null | grep -q "state"; then
         ip link set "$iface" up 2>/dev/null
-        if udhcpc -i "$iface" -q -n -t 3 2>/dev/null; then
-            IP=$(ip addr show "$iface" 2>/dev/null | grep "inet " | awk '{print $2}')
-            printf " Connected ($iface $IP)\n"
-            break
-        fi
+        ip addr add 10.0.2.15/24 dev "$iface" 2>/dev/null
+        ip route add default via 10.0.2.2 2>/dev/null
+        echo "nameserver 8.8.8.8" > /etc/resolv.conf
+        printf " Connected ($iface)\n"
+        _net_ok=1
+        break
     fi
-done 2>/dev/null || printf " Not available\n"
+done
+[ "$_net_ok" = "0" ] && printf " Not available\n"
 
 echo ""
 echo "  Type 'help' to see the list of EunOS commands."
