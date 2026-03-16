@@ -1,4 +1,4 @@
-# EunOS
+# EunOS — Built entirely by Claude Code
 
 > A custom Linux-based operating system, entirely built by **Claude Code** (Anthropic's AI coding assistant).
 
