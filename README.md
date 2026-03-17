@@ -180,3 +180,5 @@ MIT License — Free to use, modify, and distribute.
 
 *Made entirely by [Claude Code](https://claude.ai/code) — Anthropic's AI coding assistant*
 *Version 1.0.0 | March 2025*
+
+심지어 이것도 클로드 코드가 써줬습니다 ㅋㅋ
